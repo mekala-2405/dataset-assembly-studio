@@ -1,0 +1,360 @@
+# Task 1 fix round 1 review package (non-git workspace)
+--- .superpowers/sdd/2026-07-27-named-curation-workspaces/task-1-fix1-base/named_workspaces.py	2026-07-27 16:22:53.586702162 +0530
++++ dataset_studio/backend/named_workspaces.py	2026-07-27 16:26:45.248827976 +0530
+@@ -47,7 +47,17 @@
+ 
+ def _write_registry(root: Path, registry: dict) -> None:
+     path = _registry_file(root)
+-    path.write_text(json.dumps(registry, indent=2, sort_keys=True))
++    temporary = path.parent / f".tmp-{uuid.uuid4().hex}"
++    try:
++        with temporary.open("w") as handle:
++            json.dump(registry, handle, indent=2, sort_keys=True)
++            handle.flush()
++            os.fsync(handle.fileno())
++        os.replace(temporary, path)
++    except Exception:
++        if temporary.exists():
++            temporary.unlink()
++        raise
+ 
+ 
+ def _new_workspace(name: str) -> dict:
+@@ -185,41 +195,110 @@
+     return restore
+ 
+ 
+-def _activate_restore(root: Path, restore: Path) -> None:
++def _remove_target(path: Path) -> None:
++    if path.is_dir():
++        shutil.rmtree(path)
++    else:
++        path.unlink()
++
++
++def _replace_with_retry(source: Path, destination: Path) -> None:
++    last_error: OSError | None = None
++    for _ in range(2):
++        try:
++            os.replace(source, destination)
++            return
++        except OSError as error:
++            last_error = error
++    assert last_error is not None
++    raise last_error
++
++
++def _copy_recovery_target(source: Path, destination: Path) -> None:
++    if source.is_dir():
++        shutil.copytree(source, destination, dirs_exist_ok=True)
++    else:
++        shutil.copy2(source, destination)
++
++
++class _Activation:
++    def __init__(self, restore: Path, rollback: Path):
++        self.restore = restore
++        self.rollback = rollback
++        self.moved_to_rollback: list[str] = []
++        self.installed: list[str] = []
++
++    def rollback_active_state(self, studio: Path) -> tuple[list[Exception], bool]:
++        """Restore active targets and report whether recovery copies must be retained."""
++        errors: list[Exception] = []
++        retain_recovery = False
++        for target in reversed(self.installed):
++            installed_path = studio / target
++            if not installed_path.exists():
++                continue
++            try:
++                _remove_target(installed_path)
++            except Exception as error:
++                errors.append(error)
++                retain_recovery = True
++        for target in reversed(self.moved_to_rollback):
++            rollback_path = self.rollback / target
++            if not rollback_path.exists():
++                continue
++            try:
++                _replace_with_retry(rollback_path, studio / target)
++            except OSError as move_error:
++                retain_recovery = True
++                try:
++                    _copy_recovery_target(rollback_path, studio / target)
++                except Exception as copy_error:
++                    errors.extend((move_error, copy_error))
++        return errors, retain_recovery
++
++    def cleanup(self) -> None:
++        if self.restore.exists():
++            shutil.rmtree(self.restore)
++        if self.rollback.exists():
++            shutil.rmtree(self.rollback)
++
++
++def _restore_after_failed_activation(activation: _Activation, studio: Path, original_error: Exception) -> None:
++    errors, retain_recovery = activation.rollback_active_state(studio)
++    if not errors and not retain_recovery:
++        activation.cleanup()
++    if errors:
++        raise original_error from errors[0]
++    raise original_error
++
++
++def _persist_registry_after_activation(root: Path, registry: dict, activation: _Activation) -> None:
++    try:
++        _write_registry(root, registry)
++    except Exception as registry_error:
++        _restore_after_failed_activation(activation, _studio_root(root), registry_error)
++    else:
++        activation.cleanup()
++
++
++def _activate_restore(root: Path, restore: Path) -> _Activation:
+     studio = _studio_root(root)
+     rollback = studio / f".rollback-{uuid.uuid4().hex}"
+     rollback.mkdir()
+-    moved_to_rollback: list[str] = []
+-    installed: list[str] = []
++    activation = _Activation(restore, rollback)
+     try:
+         for target in ACTIVE_TARGETS:
+             current = studio / target
+             if current.exists():
+                 os.replace(current, rollback / target)
+-                moved_to_rollback.append(target)
++                activation.moved_to_rollback.append(target)
+         for target in ACTIVE_TARGETS:
+             staged = restore / target
+             if staged.exists():
+                 os.replace(staged, studio / target)
+-                installed.append(target)
+-    except Exception:
+-        for target in reversed(installed):
+-            installed_path = studio / target
+-            if installed_path.exists():
+-                if installed_path.is_dir():
+-                    shutil.rmtree(installed_path)
+-                else:
+-                    installed_path.unlink()
+-        for target in reversed(moved_to_rollback):
+-            rollback_path = rollback / target
+-            if rollback_path.exists():
+-                os.replace(rollback_path, studio / target)
+-        raise
+-    finally:
+-        if restore.exists():
+-            shutil.rmtree(restore)
+-        if rollback.exists():
+-            shutil.rmtree(rollback)
++                activation.installed.append(target)
++        return activation
++    except Exception as activation_error:
++        _restore_after_failed_activation(activation, studio, activation_error)
+ 
+ 
+ def create_named_workspace(root: Path, current_name: str, new_name: str, confirmation: str) -> dict:
+@@ -235,14 +314,13 @@
+ 
+         snapshot_workspace = {**previous, "name": current_name, "updated_at": _now()}
+         _snapshot_workspace(root, snapshot_workspace)
+-        restore = _empty_restore(root)
+-        _activate_restore(root, restore)
++        activation = _activate_restore(root, _empty_restore(root))
+ 
+         previous.update(snapshot_workspace)
+         active = _new_workspace(new_name)
+         registry["workspaces"].append(active)
+         registry["active_workspace_id"] = active["id"]
+-        _write_registry(root, registry)
++        _persist_registry_after_activation(root, registry, activation)
+         return {"previous_workspace": copy.deepcopy(previous), "active_workspace": copy.deepcopy(active)}
+ 
+ 
+@@ -257,11 +335,10 @@
+             raise ValueError("workspace does not exist")
+ 
+         _snapshot_workspace(root, previous)
+-        restore = _copy_snapshot_to_restore(root, selected["id"])
+-        _activate_restore(root, restore)
++        activation = _activate_restore(root, _copy_snapshot_to_restore(root, selected["id"]))
+ 
+         previous["updated_at"] = _now()
+         selected["updated_at"] = _now()
+         registry["active_workspace_id"] = selected["id"]
+-        _write_registry(root, registry)
++        _persist_registry_after_activation(root, registry, activation)
+         return {"previous_workspace": copy.deepcopy(previous), "active_workspace": copy.deepcopy(selected)}
+--- .superpowers/sdd/2026-07-27-named-curation-workspaces/task-1-fix1-base/test_named_workspaces.py	2026-07-27 16:22:53.590702060 +0530
++++ dataset_studio/tests/test_named_workspaces.py	2026-07-27 16:25:48.533256418 +0530
+@@ -1,4 +1,5 @@
+ import json
++import os
+ import tempfile
+ import unittest
+ from pathlib import Path
+@@ -20,6 +21,7 @@
+         workspace = '{"user":"alice","checkpoints":{"/datasets/current":{"status":"approved"}}}\n'
+         settings = '{"output_name":"preserve-me"}\n'
+         job = '{"id":"job-1","status":"completed"}\n'
++        manifest = '{"job_id":"job-1","episodes":[0]}\n'
+         archive = b"prepared archive bytes\\x00\\xff"
+         (studio / "claims.json").write_text(claims)
+         (studio / "dataset_checkpoints.json").write_text(checkpoints)
+@@ -27,15 +29,37 @@
+         (studio / "settings.json").write_text(settings)
+         (studio / "jobs").mkdir()
+         (studio / "jobs" / "job-1.json").write_text(job)
++        (studio / "jobs" / "job-1.manifest.json").write_text(manifest)
+         (studio / "downloads").mkdir()
+         (studio / "downloads" / "job-1.tar.gz").write_bytes(archive)
++        (root / "source_dataset" / "meta").mkdir(parents=True)
++        (root / "source_dataset" / "meta" / "info.json").write_text('{"source":"preserve-me"}\n')
++        (root / "exports" / ".staging-job-1").mkdir(parents=True)
++        (root / "exports" / ".staging-job-1" / "partial.txt").write_text("staging preserve-me\n")
++        (root / "exports" / "completed" / "meta").mkdir(parents=True)
++        (root / "exports" / "completed" / "meta" / "info.json").write_text('{"completed":"preserve-me"}\n')
+         return {
+             "claims": claims,
+             "checkpoints": checkpoints,
+             "workspace": workspace,
+             "settings": settings,
+             "job": job,
++            "manifest": manifest,
+             "archive": archive,
++            "source": '{"source":"preserve-me"}\n',
++            "staging": "staging preserve-me\n",
++            "completed": '{"completed":"preserve-me"}\n',
++        }
++
++    def active_state_bytes(self, studio: Path) -> dict:
++        return {
++            "claims": (studio / "claims.json").read_bytes(),
++            "checkpoints": (studio / "dataset_checkpoints.json").read_bytes(),
++            "workspaces": {
++                path.relative_to(studio / "workspaces").as_posix(): path.read_bytes()
++                for path in sorted((studio / "workspaces").rglob("*"))
++                if path.is_file()
++            },
+         }
+ 
+     def test_registering_and_creating_workspace_snapshots_active_state_only(self):
+@@ -64,7 +88,11 @@
+             self.assertEqual((snapshot / "workspaces" / "alice.json").read_text(), original["workspace"])
+             self.assertEqual((root / ".dataset_studio" / "settings.json").read_text(), original["settings"])
+             self.assertEqual((root / ".dataset_studio" / "jobs" / "job-1.json").read_text(), original["job"])
++            self.assertEqual((root / ".dataset_studio" / "jobs" / "job-1.manifest.json").read_text(), original["manifest"])
+             self.assertEqual((root / ".dataset_studio" / "downloads" / "job-1.tar.gz").read_bytes(), original["archive"])
++            self.assertEqual((root / "source_dataset" / "meta" / "info.json").read_text(), original["source"])
++            self.assertEqual((root / "exports" / ".staging-job-1" / "partial.txt").read_text(), original["staging"])
++            self.assertEqual((root / "exports" / "completed" / "meta" / "info.json").read_text(), original["completed"])
+ 
+     def test_create_validates_confirmation_and_workspace_names(self):
+         """Would fail if unsafe, duplicate, or unconfirmed requests could change workspace state."""
+@@ -158,6 +186,106 @@
+             self.assertEqual((studio / "workspaces" / "alice.json").read_bytes(), active_before["workspace"])
+             self.assertEqual((studio / "settings.json").read_text(), original["settings"])
+ 
++    def test_failed_activation_and_transient_rollback_restore_preserve_active_state(self):
++        """Would fail if a failed restore discarded rollback data or left an active target missing."""
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            self.make_active_state(root)
++            ensure_workspace_registry(root)
++            created = create_named_workspace(root, "Development tests", "Production curation", "START NEW WORKSPACE")
++            studio = root / ".dataset_studio"
++            (studio / "claims.json").write_text('{"claims":{"/datasets/production":"bob"}}\n')
++            (studio / "dataset_checkpoints.json").write_text('{"checkpoints":{},"history":{}}\n')
++            (studio / "workspaces" / "bob.json").write_text('{"user":"bob","checkpoints":{}}\n')
++            active_before = self.active_state_bytes(studio)
++            registry_before = (studio / "workspace_registry.json").read_bytes()
++            real_replace = os.replace
++            injected = {"install": False, "rollback": False}
++
++            def fail_install_and_one_restore(source, destination):
++                source = Path(source)
++                destination = Path(destination)
++                if (
++                    not injected["install"]
++                    and source.parent.name.startswith(".restore-")
++                    and destination == studio / "dataset_checkpoints.json"
++                ):
++                    injected["install"] = True
++                    raise OSError("target move failed")
++                if (
++                    injected["install"]
++                    and not injected["rollback"]
++                    and source.parent.name.startswith(".rollback-")
++                    and destination == studio / "claims.json"
++                ):
++                    injected["rollback"] = True
++                    raise OSError("rollback move failed")
++                return real_replace(source, destination)
++
++            with patch("backend.named_workspaces.os.replace", side_effect=fail_install_and_one_restore):
++                with self.assertRaisesRegex(OSError, "target move failed"):
++                    switch_named_workspace(root, created["previous_workspace"]["id"], "SWITCH WORKSPACE")
++
++            self.assertTrue(injected["install"])
++            self.assertTrue(injected["rollback"])
++            self.assertEqual(self.active_state_bytes(studio), active_before)
++            self.assertEqual((studio / "workspace_registry.json").read_bytes(), registry_before)
++
++    def test_registry_atomic_replace_failure_restores_prior_active_state(self):
++        """Would fail if a registry persistence error stranded newly activated state."""
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            self.make_active_state(root)
++            ensure_workspace_registry(root)
++            studio = root / ".dataset_studio"
++            active_before = self.active_state_bytes(studio)
++            registry_before = (studio / "workspace_registry.json").read_bytes()
++            real_replace = os.replace
++
++            def fail_registry_replace(source, destination):
++                if Path(destination) == studio / "workspace_registry.json":
++                    raise OSError("registry disk full")
++                return real_replace(source, destination)
++
++            with patch("backend.named_workspaces.os.replace", side_effect=fail_registry_replace):
++                with self.assertRaisesRegex(OSError, "registry disk full"):
++                    create_named_workspace(root, "Development tests", "Production curation", "START NEW WORKSPACE")
++
++            self.assertEqual(self.active_state_bytes(studio), active_before)
++            self.assertEqual((studio / "workspace_registry.json").read_bytes(), registry_before)
++
++    def test_permanent_rollback_move_failure_keeps_recovery_copy_and_active_state(self):
++        """Would fail if an unrecoverable rollback move deleted the only usable recovery copy."""
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            self.make_active_state(root)
++            ensure_workspace_registry(root)
++            created = create_named_workspace(root, "Development tests", "Production curation", "START NEW WORKSPACE")
++            studio = root / ".dataset_studio"
++            (studio / "claims.json").write_text('{"claims":{"/datasets/production":"bob"}}\n')
++            (studio / "dataset_checkpoints.json").write_text('{"checkpoints":{},"history":{}}\n')
++            (studio / "workspaces" / "bob.json").write_text('{"user":"bob","checkpoints":{}}\n')
++            active_before = self.active_state_bytes(studio)
++            real_replace = os.replace
++
++            def fail_install_and_all_claim_restores(source, destination):
++                source = Path(source)
++                destination = Path(destination)
++                if source.parent.name.startswith(".restore-") and destination == studio / "dataset_checkpoints.json":
++                    raise OSError("target move failed")
++                if source.parent.name.startswith(".rollback-") and destination == studio / "claims.json":
++                    raise OSError("rollback move failed")
++                return real_replace(source, destination)
++
++            with patch("backend.named_workspaces.os.replace", side_effect=fail_install_and_all_claim_restores):
++                with self.assertRaisesRegex(OSError, "target move failed"):
++                    switch_named_workspace(root, created["previous_workspace"]["id"], "SWITCH WORKSPACE")
++
++            self.assertEqual(self.active_state_bytes(studio), active_before)
++            recovery = list(studio.glob(".rollback-*"))
++            self.assertEqual(len(recovery), 1)
++            self.assertEqual((recovery[0] / "claims.json").read_bytes(), active_before["claims"])
++
+ 
+ if __name__ == "__main__":
+     unittest.main()

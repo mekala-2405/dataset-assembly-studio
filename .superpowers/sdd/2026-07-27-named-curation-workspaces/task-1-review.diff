@@ -1,0 +1,439 @@
+# Task 1 review package (non-git workspace)
+## New file: dataset_studio/backend/named_workspaces.py
+--- /dev/null	2026-07-25 09:42:40.849999486 +0530
++++ dataset_studio/backend/named_workspaces.py	2026-07-27 16:19:21.661195172 +0530
+@@ -0,0 +1,267 @@
++from __future__ import annotations
++
++import copy
++import fcntl
++import json
++import os
++import shutil
++import uuid
++from contextlib import contextmanager
++from datetime import datetime, timezone
++from pathlib import Path
++
++
++ACTIVE_TARGETS = ("claims.json", "dataset_checkpoints.json", "workspaces")
++NEW_CONFIRMATION = "START NEW WORKSPACE"
++SWITCH_CONFIRMATION = "SWITCH WORKSPACE"
++
++
++def _studio_root(root: Path) -> Path:
++    return Path(root) / ".dataset_studio"
++
++
++def _registry_file(root: Path) -> Path:
++    return _studio_root(root) / "workspace_registry.json"
++
++
++def _now() -> str:
++    return datetime.now(timezone.utc).isoformat()
++
++
++@contextmanager
++def _registry_lock(root: Path):
++    studio = _studio_root(root)
++    studio.mkdir(parents=True, exist_ok=True)
++    with (studio / "workspace_registry.lock").open("a+") as handle:
++        fcntl.flock(handle, fcntl.LOCK_EX)
++        try:
++            yield
++        finally:
++            fcntl.flock(handle, fcntl.LOCK_UN)
++
++
++def _read_registry(root: Path) -> dict | None:
++    path = _registry_file(root)
++    return json.loads(path.read_text()) if path.exists() else None
++
++
++def _write_registry(root: Path, registry: dict) -> None:
++    path = _registry_file(root)
++    path.write_text(json.dumps(registry, indent=2, sort_keys=True))
++
++
++def _new_workspace(name: str) -> dict:
++    timestamp = _now()
++    return {
++        "id": uuid.uuid4().hex,
++        "name": name,
++        "created_at": timestamp,
++        "updated_at": timestamp,
++    }
++
++
++def _ensure_registry(root: Path) -> dict:
++    registry = _read_registry(root)
++    if registry is not None:
++        return registry
++    workspace = _new_workspace("Current workspace")
++    registry = {"active_workspace_id": workspace["id"], "workspaces": [workspace]}
++    _write_registry(root, registry)
++    return registry
++
++
++def ensure_workspace_registry(root: Path) -> dict:
++    """Return the named-workspace registry without changing the active state."""
++    with _registry_lock(root):
++        return copy.deepcopy(_ensure_registry(root))
++
++
++def _validate_name(name: str, label: str = "workspace name") -> str:
++    normalized = str(name).strip()
++    if not normalized:
++        raise ValueError(f"{label} must not be blank")
++    if "/" in normalized or "\\" in normalized:
++        raise ValueError(f"{label} must not contain a slash")
++    return normalized
++
++
++def _active_workspace(registry: dict) -> dict:
++    active_id = registry["active_workspace_id"]
++    for workspace in registry["workspaces"]:
++        if workspace["id"] == active_id:
++            return workspace
++    raise ValueError("active workspace is missing from the registry")
++
++
++def _validate_new_name(registry: dict, name: str, ignored_id: str | None = None) -> str:
++    normalized = _validate_name(name)
++    existing = {
++        workspace["name"].casefold()
++        for workspace in registry["workspaces"]
++        if workspace["id"] != ignored_id
++    }
++    if normalized.casefold() in existing:
++        raise ValueError("workspace name already exists")
++    return normalized
++
++
++def _validate_json_files(directory: Path) -> None:
++    for path in directory.rglob("*.json"):
++        json.loads(path.read_text())
++
++
++def _snapshot_workspace(root: Path, workspace: dict) -> Path:
++    """Copy active targets into a validated snapshot, replacing any earlier one safely."""
++    studio = _studio_root(root)
++    saved = studio / "saved_workspaces"
++    saved.mkdir(parents=True, exist_ok=True)
++    temporary = saved / f".tmp-{uuid.uuid4().hex}"
++    final = saved / workspace["id"]
++    recovery: Path | None = None
++    try:
++        temporary.mkdir()
++        (temporary / "workspace.json").write_text(json.dumps(workspace, indent=2, sort_keys=True))
++        for target in ACTIVE_TARGETS:
++            source = studio / target
++            destination = temporary / target
++            if not source.exists():
++                continue
++            if source.is_dir():
++                shutil.copytree(source, destination)
++            else:
++                shutil.copy2(source, destination)
++        _validate_json_files(temporary)
++        if final.exists():
++            recovery = saved / f".recovery-{workspace['id']}-{_now().replace(':', '-')}-{uuid.uuid4().hex}"
++            os.replace(final, recovery)
++        try:
++            os.replace(temporary, final)
++        except Exception:
++            if recovery is not None and recovery.exists():
++                os.replace(recovery, final)
++            raise
++        if recovery is not None and recovery.exists():
++            shutil.rmtree(recovery)
++        return final
++    except Exception:
++        if temporary.exists():
++            shutil.rmtree(temporary)
++        raise
++
++
++def _copy_snapshot_to_restore(root: Path, workspace_id: str) -> Path:
++    studio = _studio_root(root)
++    snapshot = studio / "saved_workspaces" / workspace_id
++    if not snapshot.is_dir():
++        raise ValueError("workspace snapshot is missing")
++    restore = studio / f".restore-{uuid.uuid4().hex}"
++    try:
++        restore.mkdir()
++        for target in ACTIVE_TARGETS:
++            source = snapshot / target
++            destination = restore / target
++            if not source.exists():
++                continue
++            if source.is_dir():
++                shutil.copytree(source, destination)
++            else:
++                shutil.copy2(source, destination)
++        _validate_json_files(restore)
++        return restore
++    except Exception:
++        if restore.exists():
++            shutil.rmtree(restore)
++        raise
++
++
++def _empty_restore(root: Path) -> Path:
++    studio = _studio_root(root)
++    restore = studio / f".restore-{uuid.uuid4().hex}"
++    restore.mkdir()
++    (restore / "claims.json").write_text(json.dumps({"claims": {}}))
++    (restore / "dataset_checkpoints.json").write_text(json.dumps({"checkpoints": {}, "history": {}}))
++    (restore / "workspaces").mkdir()
++    _validate_json_files(restore)
++    return restore
++
++
++def _activate_restore(root: Path, restore: Path) -> None:
++    studio = _studio_root(root)
++    rollback = studio / f".rollback-{uuid.uuid4().hex}"
++    rollback.mkdir()
++    moved_to_rollback: list[str] = []
++    installed: list[str] = []
++    try:
++        for target in ACTIVE_TARGETS:
++            current = studio / target
++            if current.exists():
++                os.replace(current, rollback / target)
++                moved_to_rollback.append(target)
++        for target in ACTIVE_TARGETS:
++            staged = restore / target
++            if staged.exists():
++                os.replace(staged, studio / target)
++                installed.append(target)
++    except Exception:
++        for target in reversed(installed):
++            installed_path = studio / target
++            if installed_path.exists():
++                if installed_path.is_dir():
++                    shutil.rmtree(installed_path)
++                else:
++                    installed_path.unlink()
++        for target in reversed(moved_to_rollback):
++            rollback_path = rollback / target
++            if rollback_path.exists():
++                os.replace(rollback_path, studio / target)
++        raise
++    finally:
++        if restore.exists():
++            shutil.rmtree(restore)
++        if rollback.exists():
++            shutil.rmtree(rollback)
++
++
++def create_named_workspace(root: Path, current_name: str, new_name: str, confirmation: str) -> dict:
++    if confirmation != NEW_CONFIRMATION:
++        raise ValueError(f"confirmation must be {NEW_CONFIRMATION}")
++    with _registry_lock(root):
++        registry = _ensure_registry(root)
++        previous = _active_workspace(registry)
++        current_name = _validate_new_name(registry, current_name, ignored_id=previous["id"])
++        new_name = _validate_new_name(registry, new_name, ignored_id=previous["id"])
++        if current_name.casefold() == new_name.casefold():
++            raise ValueError("workspace name already exists")
++
++        snapshot_workspace = {**previous, "name": current_name, "updated_at": _now()}
++        _snapshot_workspace(root, snapshot_workspace)
++        restore = _empty_restore(root)
++        _activate_restore(root, restore)
++
++        previous.update(snapshot_workspace)
++        active = _new_workspace(new_name)
++        registry["workspaces"].append(active)
++        registry["active_workspace_id"] = active["id"]
++        _write_registry(root, registry)
++        return {"previous_workspace": copy.deepcopy(previous), "active_workspace": copy.deepcopy(active)}
++
++
++def switch_named_workspace(root: Path, workspace_id: str, confirmation: str) -> dict:
++    if confirmation != SWITCH_CONFIRMATION:
++        raise ValueError(f"confirmation must be {SWITCH_CONFIRMATION}")
++    with _registry_lock(root):
++        registry = _ensure_registry(root)
++        previous = _active_workspace(registry)
++        selected = next((item for item in registry["workspaces"] if item["id"] == workspace_id), None)
++        if selected is None:
++            raise ValueError("workspace does not exist")
++
++        _snapshot_workspace(root, previous)
++        restore = _copy_snapshot_to_restore(root, selected["id"])
++        _activate_restore(root, restore)
++
++        previous["updated_at"] = _now()
++        selected["updated_at"] = _now()
++        registry["active_workspace_id"] = selected["id"]
++        _write_registry(root, registry)
++        return {"previous_workspace": copy.deepcopy(previous), "active_workspace": copy.deepcopy(selected)}
+## New file: dataset_studio/tests/test_named_workspaces.py
+--- /dev/null	2026-07-25 09:42:40.849999486 +0530
++++ dataset_studio/tests/test_named_workspaces.py	2026-07-27 16:19:09.308520029 +0530
+@@ -0,0 +1,163 @@
++import json
++import tempfile
++import unittest
++from pathlib import Path
++from unittest.mock import patch
++
++from backend.named_workspaces import create_named_workspace, ensure_workspace_registry, switch_named_workspace
++from backend.workspaces import load_claims, load_shared_checkpoints
++
++
++class NamedWorkspaceTests(unittest.TestCase):
++    def make_active_state(self, root: Path) -> dict[str, str]:
++        studio = root / ".dataset_studio"
++        (studio / "workspaces").mkdir(parents=True)
++        claims = '{"claims":{"/datasets/current":"alice"}}\n'
++        checkpoints = (
++            '{"checkpoints":{"/datasets/current":{"status":"approved"}},'
++            '"history":{"/datasets/current":[{"status":"approved"}]}}\n'
++        )
++        workspace = '{"user":"alice","checkpoints":{"/datasets/current":{"status":"approved"}}}\n'
++        settings = '{"output_name":"preserve-me"}\n'
++        job = '{"id":"job-1","status":"completed"}\n'
++        archive = b"prepared archive bytes\\x00\\xff"
++        (studio / "claims.json").write_text(claims)
++        (studio / "dataset_checkpoints.json").write_text(checkpoints)
++        (studio / "workspaces" / "alice.json").write_text(workspace)
++        (studio / "settings.json").write_text(settings)
++        (studio / "jobs").mkdir()
++        (studio / "jobs" / "job-1.json").write_text(job)
++        (studio / "downloads").mkdir()
++        (studio / "downloads" / "job-1.tar.gz").write_bytes(archive)
++        return {
++            "claims": claims,
++            "checkpoints": checkpoints,
++            "workspace": workspace,
++            "settings": settings,
++            "job": job,
++            "archive": archive,
++        }
++
++    def test_registering_and_creating_workspace_snapshots_active_state_only(self):
++        """Would fail if registration modifies state or creation omits an active target."""
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            original = self.make_active_state(root)
++
++            registry = ensure_workspace_registry(root)
++            self.assertEqual(len(registry["workspaces"]), 1)
++            self.assertEqual((root / ".dataset_studio" / "claims.json").read_text(), original["claims"])
++
++            created = create_named_workspace(
++                root,
++                current_name="Development tests",
++                new_name="Production curation",
++                confirmation="START NEW WORKSPACE",
++            )
++
++            self.assertEqual(created["active_workspace"]["name"], "Production curation")
++            self.assertEqual(load_claims(root), {"claims": {}})
++            self.assertEqual(load_shared_checkpoints(root), {"checkpoints": {}, "history": {}})
++            snapshot = root / ".dataset_studio" / "saved_workspaces" / created["previous_workspace"]["id"]
++            self.assertTrue((snapshot / "claims.json").is_file())
++            self.assertEqual((snapshot / "dataset_checkpoints.json").read_text(), original["checkpoints"])
++            self.assertEqual((snapshot / "workspaces" / "alice.json").read_text(), original["workspace"])
++            self.assertEqual((root / ".dataset_studio" / "settings.json").read_text(), original["settings"])
++            self.assertEqual((root / ".dataset_studio" / "jobs" / "job-1.json").read_text(), original["job"])
++            self.assertEqual((root / ".dataset_studio" / "downloads" / "job-1.tar.gz").read_bytes(), original["archive"])
++
++    def test_create_validates_confirmation_and_workspace_names(self):
++        """Would fail if unsafe, duplicate, or unconfirmed requests could change workspace state."""
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            self.make_active_state(root)
++            registry = ensure_workspace_registry(root)
++
++            with self.assertRaisesRegex(ValueError, "START NEW WORKSPACE"):
++                create_named_workspace(root, "Development tests", "Production curation", "start")
++            with self.assertRaisesRegex(ValueError, "blank"):
++                create_named_workspace(root, "Development tests", " ", "START NEW WORKSPACE")
++            with self.assertRaisesRegex(ValueError, "slash"):
++                create_named_workspace(root, "Development tests", "bad/name", "START NEW WORKSPACE")
++            with self.assertRaisesRegex(ValueError, "blank"):
++                create_named_workspace(root, " ", "Production curation", "START NEW WORKSPACE")
++
++            created = create_named_workspace(root, "Development tests", "Production curation", "START NEW WORKSPACE")
++            with self.assertRaisesRegex(ValueError, "already exists"):
++                create_named_workspace(root, "Production curation", "production curation", "START NEW WORKSPACE")
++            with self.assertRaisesRegex(ValueError, "already exists"):
++                create_named_workspace(root, "development tests", "Research curation", "START NEW WORKSPACE")
++            with self.assertRaisesRegex(ValueError, "SWITCH WORKSPACE"):
++                switch_named_workspace(root, registry["active_workspace_id"], "switch")
++            with self.assertRaisesRegex(ValueError, "does not exist"):
++                switch_named_workspace(root, "missing", "SWITCH WORKSPACE")
++            self.assertEqual(created["active_workspace"]["name"], "Production curation")
++
++    def test_switch_restores_each_workspace_active_state_in_both_directions(self):
++        """Would fail if switching lost claims, checkpoint history, or per-user workspace files."""
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            original = self.make_active_state(root)
++            ensure_workspace_registry(root)
++            created = create_named_workspace(root, "Development tests", "Production curation", "START NEW WORKSPACE")
++
++            studio = root / ".dataset_studio"
++            production_claims = {"claims": {"/datasets/production": "bob"}}
++            production_checkpoints = {
++                "checkpoints": {"/datasets/production": {"status": "excluded", "reason": "duplicate"}},
++                "history": {"/datasets/production": [{"status": "excluded", "reason": "duplicate"}]},
++            }
++            (studio / "claims.json").write_text(json.dumps(production_claims))
++            (studio / "dataset_checkpoints.json").write_text(json.dumps(production_checkpoints))
++            (studio / "workspaces" / "bob.json").write_text('{"user":"bob","checkpoints":{"/datasets/production":{}}}')
++
++            switched_old = switch_named_workspace(
++                root,
++                created["previous_workspace"]["id"],
++                "SWITCH WORKSPACE",
++            )
++            self.assertEqual(switched_old["active_workspace"]["name"], "Development tests")
++            self.assertEqual((studio / "claims.json").read_text(), original["claims"])
++            self.assertEqual((studio / "dataset_checkpoints.json").read_text(), original["checkpoints"])
++            self.assertEqual((studio / "workspaces" / "alice.json").read_text(), original["workspace"])
++            self.assertFalse((studio / "workspaces" / "bob.json").exists())
++
++            switched_new = switch_named_workspace(
++                root,
++                created["active_workspace"]["id"],
++                "SWITCH WORKSPACE",
++            )
++            self.assertEqual(switched_new["active_workspace"]["name"], "Production curation")
++            self.assertEqual(load_claims(root), production_claims)
++            self.assertEqual(load_shared_checkpoints(root), production_checkpoints)
++            self.assertTrue((studio / "workspaces" / "bob.json").is_file())
++            names = [workspace["name"] for workspace in ensure_workspace_registry(root)["workspaces"]]
++            self.assertEqual(names, ["Development tests", "Production curation"])
++
++    def test_failed_snapshot_copy_leaves_registry_and_active_state_unchanged(self):
++        """Would fail if a disk-full snapshot error partially renamed state or the registry."""
++        with tempfile.TemporaryDirectory() as tmp:
++            root = Path(tmp)
++            original = self.make_active_state(root)
++            ensure_workspace_registry(root)
++            studio = root / ".dataset_studio"
++            registry_before = json.loads((studio / "workspace_registry.json").read_text())
++            active_before = {
++                "claims": (studio / "claims.json").read_bytes(),
++                "checkpoints": (studio / "dataset_checkpoints.json").read_bytes(),
++                "workspace": (studio / "workspaces" / "alice.json").read_bytes(),
++            }
++
++            with patch("shutil.copytree", side_effect=OSError("disk full")):
++                with self.assertRaisesRegex(OSError, "disk full"):
++                    create_named_workspace(root, "Development tests", "Production curation", "START NEW WORKSPACE")
++
++            self.assertEqual(json.loads((studio / "workspace_registry.json").read_text()), registry_before)
++            self.assertEqual((studio / "claims.json").read_bytes(), active_before["claims"])
++            self.assertEqual((studio / "dataset_checkpoints.json").read_bytes(), active_before["checkpoints"])
++            self.assertEqual((studio / "workspaces" / "alice.json").read_bytes(), active_before["workspace"])
++            self.assertEqual((studio / "settings.json").read_text(), original["settings"])
++
++
++if __name__ == "__main__":
++    unittest.main()

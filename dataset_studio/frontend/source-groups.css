@@ -1,0 +1,23 @@
+.source-group {
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fffdf8;
+}
+
+.source-group > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.source-group > summary small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.source-datasets { padding: 0 12px; }
+.source-datasets .dataset-card { border-bottom: 0; }

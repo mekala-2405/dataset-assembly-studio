@@ -1,0 +1,16 @@
+.save-banner {
+  position: fixed;
+  z-index: 20;
+  right: 18px;
+  bottom: 18px;
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  box-shadow: 0 8px 30px #17231e22;
+  font-size: 12px;
+}
+.save-banner.saving { color: var(--orange); }
+.save-banner.saved { color: var(--leaf); }
+.save-banner.failed { color: var(--red); }

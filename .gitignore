@@ -1,0 +1,105 @@
+# Downloaded datasets and other top-level data directories
+/*/
+
+# Project source, documentation, and development records
+!/dataset_studio/
+!/docs/
+!/.superpowers/
+
+# Dataset Studio runtime state and generated exports
+/.dataset_studio/
+/exports/
+/dataset_index.json
+
+# Generated archives
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.cache/
+.hypothesis/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# Python packaging and build output
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# Test and coverage output
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.direnv/
+
+# Local environment configuration
+.env
+.env.*
+!.env.example
+*.local
+*.secret
+*.secrets
+*.pem
+*.key
+
+# Local databases and process state
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.pid
+
+# JavaScript dependencies and generated output
+node_modules/
+.npm/
+.yarn/cache/
+.pnpm-store/
+
+# Type-checker and framework output
+.next/
+.nuxt/
+.svelte-kit/
+.parcel-cache/
+.eslintcache
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+
+# Editor and operating-system metadata
+.idea/
+.vscode/
+.fleet/
+*.code-workspace
+.DS_Store
+Thumbs.db
+Desktop.ini
+miniconda.sh

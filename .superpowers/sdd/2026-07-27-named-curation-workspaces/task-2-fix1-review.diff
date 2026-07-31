@@ -1,0 +1,99 @@
+# Task 2 fix round 1 review package (non-git workspace)
+--- .superpowers/sdd/2026-07-27-named-curation-workspaces/task-2-fix1-base/app.py	2026-07-27 16:38:15.706327224 +0530
++++ dataset_studio/backend/app.py	2026-07-27 16:39:40.570780920 +0530
+@@ -67,11 +67,12 @@
+     confirmation: str
+ 
+ 
+-def create_app(dataset_root: Path) -> FastAPI:
++def create_app(dataset_root: Path, export_jobs: ExportJobManager | None = None) -> FastAPI:
+     migrate_legacy_workspaces(dataset_root)
+     app = FastAPI(title="Dataset Assembly Studio")
+     static_root = Path(__file__).parent.parent / "frontend"
+-    export_jobs = ExportJobManager(dataset_root)
++    if export_jobs is None:
++        export_jobs = ExportJobManager(dataset_root)
+     app.mount("/static", StaticFiles(directory=static_root), name="static")
+ 
+     @lru_cache(maxsize=1)
+--- .superpowers/sdd/2026-07-27-named-curation-workspaces/task-2-fix1-base/test_app.py	2026-07-27 16:38:15.710327204 +0530
++++ dataset_studio/tests/test_app.py	2026-07-27 16:39:26.606885300 +0530
+@@ -1,19 +1,35 @@
+ import json
++import os
+ import tempfile
+ import time
+ import unittest
+ from pathlib import Path
+-from unittest.mock import patch
+ 
+ import pyarrow as pa
+ import pyarrow.parquet as pq
+ from fastapi.testclient import TestClient
+ 
+-from backend.app import create_app
+ from backend.joint_mapping import CANONICAL_JOINTS
+ from backend.named_workspaces import create_named_workspace, ensure_workspace_registry
+ 
+ 
++_APP_IMPORT_DIRECTORY = tempfile.TemporaryDirectory()
++_APP_IMPORT_CWD = Path.cwd()
++try:
++    os.chdir(_APP_IMPORT_DIRECTORY.name)
++    from backend.app import create_app
++finally:
++    os.chdir(_APP_IMPORT_CWD)
++
++
++class ListedExportJobs:
++    def __init__(self, jobs: list[dict]):
++        self._jobs = jobs
++
++    def list(self) -> list[dict]:
++        return self._jobs
++
++
+ def write_dataset(root: Path):
+     dataset = root / "demo"
+     (dataset / "meta" / "episodes" / "chunk-000").mkdir(parents=True)
+@@ -203,10 +219,19 @@
+                 "workspace_id": "missing",
+                 "confirmation": "SWITCH WORKSPACE",
+             }).status_code, 404)
++            self.assertEqual(client.post("/api/workspaces/switch", json={
++                "workspace_id": "missing",
++                "confirmation": "switch workspace",
++            }).status_code, 422)
+ 
+     def test_workspace_routes_block_create_and_switch_for_active_export_jobs(self):
+         """Would fail if a workspace change could proceed while an export or archive is active."""
+-        for status, archive_status in (("running", "not_requested"), ("completed", "preparing")):
++        for status, archive_status in (
++            ("queued", "not_requested"),
++            ("running", "not_requested"),
++            ("cancelling", "not_requested"),
++            ("completed", "preparing"),
++        ):
+             with self.subTest(status=status, archive_status=archive_status), tempfile.TemporaryDirectory() as tmp:
+                 root = Path(tmp)
+                 development_id = ensure_workspace_registry(root)["active_workspace_id"]
+@@ -217,16 +242,12 @@
+                     confirmation="START NEW WORKSPACE",
+                 )
+                 job_id = f"blocking-{status}-{archive_status}"
+-                jobs = root / ".dataset_studio" / "jobs"
+-                jobs.mkdir()
+-                (jobs / f"{job_id}.json").write_text(json.dumps({
++                export_jobs = ListedExportJobs([{
+                     "id": job_id,
+                     "status": status,
+                     "archive_status": archive_status,
+-                }))
+-
+-                with patch("backend.jobs.ExportJobManager._mark_interrupted_jobs"):
+-                    client = TestClient(create_app(root))
++                }])
++                client = TestClient(create_app(root, export_jobs=export_jobs))
+ 
+                 created = client.post("/api/workspaces/new", json={
+                     "current_name": "Production curation",

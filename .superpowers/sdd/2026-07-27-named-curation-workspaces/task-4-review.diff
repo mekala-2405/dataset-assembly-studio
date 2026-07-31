@@ -1,0 +1,69 @@
+# Task 4 review package (non-git workspace)
+--- .superpowers/sdd/2026-07-27-named-curation-workspaces/task-4-base/README.md	2026-07-27 16:50:26.281916027 +0530
++++ dataset_studio/README.md	2026-07-27 16:51:50.847390628 +0530
+@@ -38,6 +38,18 @@
+ 
+ Claims only prevent two local profiles from editing the same dataset simultaneously. There is no login or authentication; use distinct profile names and treat the app as trusted-local software.
+ 
++## Named curation workspaces
++
++The workspace control in the header lets you keep separate curation efforts in the same dataset root. A workspace owns only its users' local editor files, `claims.json`, and `dataset_checkpoints.json` (including checkpoint history). Project settings, export jobs and manifests, prepared downloads, source datasets, staging directories, and completed exports are global and are preserved when you create or switch a workspace.
++
++Select **Save & start new…** to snapshot the current workspace and begin with empty users, claims, drafts, approvals, and checkpoint history. Enter a unique workspace name and the exact confirmation phrase `START NEW WORKSPACE`. To activate an existing workspace, select its destination, choose **Switch**, and enter `SWITCH WORKSPACE`. Both operations are unavailable while an export is queued, running, cancelling, or preparing an archive, so wait for that job to reach a terminal state first.
++
++Snapshots are stored at `.dataset_studio/saved_workspaces/<workspace-id>/`; each includes `workspace.json` plus the workspace-owned state. After a successful create or switch, the browser resets its saved editor identity to `operator` and reloads. Enter the intended editor name again before resuming work.
++
++### Manual workspace recovery
++
++Workspace changes use temporary restore and rollback directories. If a failed filesystem operation leaves a `.recovery-*` directory beneath `.dataset_studio/saved_workspaces/`, stop the app first and preserve the current three workspace-owned targets (`claims.json`, `dataset_checkpoints.json`, and `workspaces/`) somewhere safe. Inspect the recovery directory's `workspace.json` to identify the snapshot, then copy its `claims.json`, `dataset_checkpoints.json`, and `workspaces/` back into `.dataset_studio/`, replacing only those three targets. Do not copy settings, jobs, downloads, exports, or source datasets. Restart the app and verify the workspace registry and curation state before deleting the recovery directory.
++
+ ## Output camera changes
+ 
+ `wrist` is mandatory. The second camera is selected in Output and reconfirmed in Export.
+--- .superpowers/sdd/2026-07-27-named-curation-workspaces/task-4-base/2026-07-27-named-curation-workspaces.md	2026-07-27 16:50:26.281916027 +0530
++++ docs/superpowers/plans/2026-07-27-named-curation-workspaces.md	2026-07-27 16:58:08.969085803 +0530
+@@ -350,7 +350,7 @@
+ **Interfaces:**
+ - Consumes: all prior tasks.
+ 
+-- [ ] **Step 1: Document workspace behavior and recovery**
++- [x] **Step 1: Document workspace behavior and recovery**
+ 
+ Add a README section explaining:
+ 
+@@ -361,7 +361,7 @@
+ - browser editor reset;
+ - manual recovery from `.recovery-*` directories.
+ 
+-- [ ] **Step 2: Run the full test suite**
++- [x] **Step 2: Run the full test suite**
+ 
+ Run:
+ 
+@@ -372,7 +372,7 @@
+ 
+ Expected: all tests pass with zero failures.
+ 
+-- [ ] **Step 3: Run rendered desktop and mobile QA**
++- [x] **Step 3: Run rendered desktop and mobile QA**
+ 
+ Browser plugin availability must be checked first. If absent, use the installed
+ headless Chrome fallback without adding dependencies. At 1440×1000 and
+@@ -387,7 +387,7 @@
+ 7. open the switch dialog and verify destination naming;
+ 8. confirm no relevant console errors or horizontal document overflow.
+ 
+-- [ ] **Step 4: Execute a temporary-root end-to-end state round trip**
++- [x] **Step 4: Execute a temporary-root end-to-end state round trip**
+ 
+ Against a temporary dataset root, create a named workspace, write distinct
+ checkpoint/user data in the new workspace, switch to the old workspace, then
+@@ -395,7 +395,7 @@
+ transition. Do not run this mutation check against the user's real
+ `.dataset_studio`.
+ 
+-- [ ] **Step 5: Mark plan complete from fresh evidence**
++- [x] **Step 5: Mark plan complete from fresh evidence**
+ 
+ Check each plan item only after the corresponding command/output or rendered
+ interaction has been observed. Record any untested production-scale
