@@ -164,8 +164,15 @@ def scan_catalog(root: Path) -> list[Dataset]:
                 files, starts = _episode_video_references(dataset_root, dataset.cameras, row)
                 episode_data = _episode_data_references(dataset_root, row, data_files)
                 dataset.episodes.append(Episode(int(row["episode_index"]), _task_index_for_episode(row, dataset.tasks), duration, reason, files, starts, episode_data))
-            if len(dataset.episodes) != int(info["total_episodes"]):
-                raise ValueError("episode count does not match metadata")
+            declared_episode_count = int(info["total_episodes"])
+            metadata_episode_count = len(episode_table)
+            if metadata_episode_count != declared_episode_count:
+                row_label = "row" if metadata_episode_count == 1 else "rows"
+                raise ValueError(
+                    "episode count does not match metadata: "
+                    f"info.json declares {declared_episode_count}, but episode metadata "
+                    f"contains {metadata_episode_count} {row_label}"
+                )
             if sum(_parquet_rows(path) for path in data_files) != int(info["total_frames"]):
                 raise ValueError("frame count does not match metadata")
         except Exception as exc:

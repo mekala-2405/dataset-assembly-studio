@@ -195,6 +195,66 @@ class ExportPlanTests(unittest.TestCase):
 
             self.assertTrue(any("action schema" in error.message for error in plan.errors))
 
+    def test_accepts_variable_and_fixed_size_float_lists_with_matching_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixed = _source(root, "fixed")
+            variable = _source(root, "variable")
+            parquet_path = Path(variable.path) / "data/chunk-000/episode_000000.parquet"
+            table = pq.read_table(parquet_path)
+            table = table.set_column(
+                table.schema.get_field_index("action"),
+                "action",
+                pa.array(table["action"].to_pylist(), type=pa.list_(pa.float32())),
+            )
+            pq.write_table(table, parquet_path)
+
+            plan = build_export_plan(
+                [fixed, variable],
+                {
+                    "checkpoints": {
+                        fixed.path: _checkpoint(fixed, "A"),
+                        variable.path: _checkpoint(variable, "B"),
+                    }
+                },
+                {"second_camera": "front"},
+                root / "export",
+            )
+
+            self.assertFalse(
+                any("action schema" in error.message for error in plan.errors),
+                [error.message for error in plan.errors],
+            )
+
+    def test_accepts_source_joint_aliases_when_frozen_mappings_are_valid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            a = _source(root, "a")
+            b = _source(root, "b")
+            info_path = Path(b.path) / "meta/info.json"
+            info = json.loads(info_path.read_text())
+            info["features"]["action"]["names"] = [
+                "main_shoulder_pan",
+                "main_shoulder_lift",
+                "main_elbow_flex",
+                "main_wrist_flex",
+                "main_wrist_roll",
+                "main_gripper",
+            ]
+            info_path.write_text(json.dumps(info))
+
+            plan = build_export_plan(
+                [a, b],
+                {"checkpoints": {a.path: _checkpoint(a, "A"), b.path: _checkpoint(b, "B")}},
+                {"second_camera": "front"},
+                root / "export",
+            )
+
+            self.assertFalse(
+                any("action schema" in error.message for error in plan.errors),
+                [error.message for error in plan.errors],
+            )
+
     def test_blocks_empty_approved_checkpoint_instead_of_silently_omitting_it(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

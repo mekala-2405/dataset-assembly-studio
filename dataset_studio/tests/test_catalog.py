@@ -122,6 +122,64 @@ class CatalogTests(unittest.TestCase):
             self.assertFalse(catalog[0].valid)
             self.assertIn("fewer than two video cameras", catalog[0].issues)
 
+    def test_quarantines_v3_dataset_when_episode_count_disagrees_with_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = write_dataset(root, "episode-count-mismatch")
+            info_path = dataset / "meta" / "info.json"
+            info = json.loads(info_path.read_text())
+            info["total_episodes"] = 2
+            info_path.write_text(json.dumps(info))
+
+            catalog = scan_catalog(root)
+
+            self.assertFalse(catalog[0].valid)
+            self.assertIn(
+                "episode count does not match metadata: info.json declares 2, "
+                "but episode metadata contains 1 row",
+                catalog[0].issues,
+            )
+
+    def test_quarantines_v21_dataset_when_episode_count_disagrees_with_jsonl(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dataset = root / "v21-count-mismatch"
+            (dataset / "meta").mkdir(parents=True)
+            (dataset / "data" / "chunk-000").mkdir(parents=True)
+            (dataset / "meta" / "info.json").write_text(
+                json.dumps(
+                    {
+                        "codebase_version": "v2.1",
+                        "fps": 30,
+                        "total_episodes": 2,
+                        "total_frames": 90,
+                        "features": {
+                            "front": {"dtype": "video"},
+                            "top": {"dtype": "video"},
+                        },
+                    }
+                )
+            )
+            (dataset / "meta" / "tasks.jsonl").write_text(
+                '{"task_index": 0, "task": "Fold cloth"}\n'
+            )
+            (dataset / "meta" / "episodes.jsonl").write_text(
+                '{"episode_index": 0, "length": 90, "task_index": 0}\n'
+            )
+            pq.write_table(
+                pa.table({"frame_index": list(range(90))}),
+                dataset / "data" / "chunk-000" / "file-000.parquet",
+            )
+
+            catalog = scan_catalog(root)
+
+            self.assertFalse(catalog[0].valid)
+            self.assertIn(
+                "episode count does not match metadata: info.json declares 2, "
+                "but episode metadata contains 1 row",
+                catalog[0].issues,
+            )
+
     def test_excludes_short_and_structurally_invalid_episodes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
