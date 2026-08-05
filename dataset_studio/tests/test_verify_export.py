@@ -11,7 +11,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from backend.verify_export import verify_v21
+from backend.verify_export import _timestamp_matches, verify_v21
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -297,6 +297,13 @@ class VerifyV21Tests(unittest.TestCase):
             messages = "\n".join(error.message for error in result.errors)
             self.assertIn("99", messages)
             self.assertIn("Unknown task", messages)
+
+    def test_accepts_float32_rounding_for_long_episode_timestamps(self):
+        frame_index = 15364
+        stored = np.float32(frame_index / 30)
+
+        self.assertTrue(_timestamp_matches(stored, frame_index, 30))
+        self.assertFalse(_timestamp_matches(float(stored) + 0.001, frame_index, 30))
 
     def test_blocks_missing_extra_and_undecodable_videos(self):
         with tempfile.TemporaryDirectory() as tmp:

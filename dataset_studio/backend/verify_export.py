@@ -288,6 +288,16 @@ def _field_vector_size(field: pa.Field) -> int | None:
     return None
 
 
+def _timestamp_matches(actual: float, frame_index: int, fps: int) -> bool:
+    """Compare a stored float32 timestamp at its representable precision."""
+    return math.isclose(
+        float(actual),
+        frame_index / fps,
+        rel_tol=1e-7,
+        abs_tol=1e-7,
+    )
+
+
 def _verify_schema(
     table: pa.Table,
     baseline: pa.Schema | None,
@@ -549,8 +559,8 @@ def _verify_parquet(
         timestamps = table["timestamp"].to_pylist()
         expected_timestamps = [index / fps for index in range(table.num_rows)]
         if len(timestamps) != len(expected_timestamps) or any(
-            not math.isclose(float(actual), expected, abs_tol=1e-5)
-            for actual, expected in zip(timestamps, expected_timestamps)
+            not _timestamp_matches(actual, index, fps)
+            for index, actual in enumerate(timestamps)
         ):
             _add_error(
                 result,

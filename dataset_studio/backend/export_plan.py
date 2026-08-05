@@ -98,6 +98,49 @@ def _error(
     plan.errors.append(PlanError(dataset_path, revision, category, message, phase))
 
 
+def _list_type_details(arrow_type: Any) -> tuple[str, int | None] | None:
+    """Return a list vector's element type and optional fixed width."""
+    text = str(arrow_type)
+    variable_prefix = "list<element: "
+    fixed_prefix = "fixed_size_list<element: "
+    if text.startswith(variable_prefix) and text.endswith(">"):
+        return text[len(variable_prefix) : -1], None
+    if text.startswith(fixed_prefix) and ">[" in text and text.endswith("]"):
+        element_type, width = text[len(fixed_prefix) :].rsplit(">[", 1)
+        try:
+            return element_type, int(width[:-1])
+        except ValueError:
+            return None
+    return None
+
+
+def _vector_schema_compatible(current: dict[str, Any], baseline: dict[str, Any]) -> bool:
+    """Compare vector meaning, allowing variable/fixed Arrow list containers."""
+    if current.get("shape") != baseline.get("shape"):
+        return False
+    current_type = _list_type_details(current.get("arrow_type"))
+    baseline_type = _list_type_details(baseline.get("arrow_type"))
+    if current_type is None or baseline_type is None:
+        return current.get("arrow_type") == baseline.get("arrow_type")
+    current_element, current_width = current_type
+    baseline_element, baseline_width = baseline_type
+    if current_element != baseline_element:
+        return False
+    shape = current.get("shape")
+    declared_width = shape[0] if isinstance(shape, list) and len(shape) == 1 else None
+    return all(
+        width is None or width == declared_width
+        for width in (current_width, baseline_width)
+    )
+
+
+def _data_schemas_compatible(current: dict[str, Any], baseline: dict[str, Any]) -> bool:
+    return all(
+        _vector_schema_compatible(current.get(column) or {}, baseline.get(column) or {})
+        for column in ("action", "observation.state")
+    )
+
+
 def _data_schema(dataset: Dataset) -> tuple[tuple[str, ...], dict[str, Any], str | None]:
     files = tuple(str(path) for path in sorted(Path(dataset.path).joinpath("data").rglob("*.parquet")))
     if not files:
@@ -127,7 +170,7 @@ def _data_schema(dataset: Dataset) -> tuple[tuple[str, ...], dict[str, Any], str
         }
         if expected is None:
             expected = current
-        elif current != expected:
+        elif not _data_schemas_compatible(current, expected):
             return files, current, "action or observation.state schema changes between source Parquet files"
     return files, expected or {}, None
 
@@ -347,11 +390,11 @@ def build_export_plan(
         if schema_baseline is None:
             schema_baseline = candidate.schema
             plan.schemas = dict(schema_baseline)
-        elif candidate.schema != schema_baseline:
+        elif not _data_schemas_compatible(candidate.schema, schema_baseline):
             for column in ("action", "observation.state"):
                 current = candidate.schema.get(column) or {}
                 baseline = schema_baseline.get(column) or {}
-                if current.get("arrow_type") != baseline.get("arrow_type") or current.get("shape") != baseline.get("shape"):
+                if not _vector_schema_compatible(current, baseline):
                     _error(
                         plan,
                         candidate.dataset.path,
