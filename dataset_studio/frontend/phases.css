@@ -244,8 +244,40 @@
   box-shadow: 0 12px 35px #3a4a3d0c;
 }
 
+.sources-root-control {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--paper) 60%, var(--panel));
+}
+
+.sources-root-control label {
+  display: grid;
+  flex: 1 1 320px;
+  min-width: 0;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.sources-root-control input {
+  width: 100%;
+  min-width: 0;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.sources-root-control .inline-status {
+  flex-basis: 100%;
+}
+
 .phase-panel#sources .catalog {
-  max-height: calc(100vh - 310px);
+  max-height: calc(100vh - 340px);
   overflow: auto;
   padding: 12px 4px 4px;
 }

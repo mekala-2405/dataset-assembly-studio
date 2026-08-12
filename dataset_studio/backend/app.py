@@ -32,6 +32,7 @@ from .named_workspaces import (
 from .recipe import EpisodeChoice, validate_and_balance
 from .preview import choose_thumbnail_camera, thumbnail_jpeg
 from .settings import load_settings, save_settings
+from .source_roots import load_sources_root, save_sources_root
 from .task_groups import (
     DEFAULT_GROQ_MODEL,
     MAX_PROMPTS_PER_REQUEST,
@@ -104,6 +105,10 @@ class TaskGroupCapPayload(BaseModel):
     episode_cap: int | None
 
 
+class SourcesRootPayload(BaseModel):
+    path: str
+
+
 def create_app(
     dataset_root: Path,
     export_jobs: ExportJobManager | None = None,
@@ -117,6 +122,11 @@ def create_app(
         export_jobs = ExportJobManager(dataset_root)
     app.mount("/static", StaticFiles(directory=static_root), name="static")
 
+    current_sources_root = {"path": load_sources_root(dataset_root)}
+
+    def sources_root() -> Path:
+        return current_sources_root["path"]
+
     @app.exception_handler(WorkspaceRecoveryRequiredError)
     @app.exception_handler(WorkspaceSnapshotIntegrityError)
     async def workspace_recovery_conflict(_request, exc):
@@ -127,7 +137,7 @@ def create_app(
 
     @lru_cache(maxsize=1)
     def catalog():
-        return scan_catalog(dataset_root)
+        return scan_catalog(sources_root())
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
@@ -145,6 +155,35 @@ def create_app(
             serialized.append(item)
         return {
             "datasets": serialized,
+            "summary": {
+                "datasets": len(datasets),
+                "valid": sum(dataset.valid for dataset in datasets),
+                "usable_episodes": sum(dataset.usable_episodes for dataset in datasets),
+            },
+        }
+
+    @app.get("/api/sources-root")
+    def get_sources_root() -> dict:
+        path = sources_root()
+        return {
+            "path": str(path),
+            "exists": path.exists(),
+            "is_dir": path.is_dir(),
+        }
+
+    @app.put("/api/sources-root")
+    def put_sources_root(payload: SourcesRootPayload) -> dict:
+        candidate = Path(payload.path).expanduser().resolve()
+        if not candidate.exists() or not candidate.is_dir():
+            raise HTTPException(422, "sources folder does not exist or is not a directory")
+        if candidate != current_sources_root["path"].resolve():
+            current_sources_root["path"] = candidate
+            save_sources_root(dataset_root, candidate)
+            catalog.cache_clear()
+        datasets = catalog()
+        return {
+            "path": str(candidate),
+            "datasets": len(datasets),
             "summary": {
                 "datasets": len(datasets),
                 "valid": sum(dataset.valid for dataset in datasets),
@@ -470,7 +509,7 @@ def create_app(
             raise HTTPException(404, "dataset or camera not found")
         episode = next((item for item in dataset.episodes if item.index == episode_index), None)
         path = Path(episode.video_files.get(camera, "")) if episode else None
-        if path is None or not path.is_file() or dataset_root not in path.parents:
+        if path is None or not path.is_file() or sources_root() not in path.parents:
             raise HTTPException(404, "no indexed preview for this episode")
         return FileResponse(path, media_type="video/mp4")
 
@@ -484,7 +523,7 @@ def create_app(
         if camera is None:
             raise HTTPException(404, "no non-wrist thumbnail camera available")
         path = Path(episode.video_files[camera])
-        if not path.is_file() or dataset_root not in path.parents:
+        if not path.is_file() or sources_root() not in path.parents:
             raise HTTPException(404, "thumbnail source not found")
         try:
             body = thumbnail_jpeg(str(path), episode.video_starts.get(camera, 0.0))

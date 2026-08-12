@@ -49,6 +49,13 @@
       <section id="sources" class="phase-panel active">
         <aside class="catalog-panel">
           <div class="section-title"><h2>Source catalog</h2><span id="catalog-count"></span></div>
+          <div class="sources-root-control" aria-label="Sources folder">
+            <label for="sources-root">Sources folder
+              <input id="sources-root" type="text" placeholder="/absolute/path/to/dataset_folders" autocomplete="off">
+            </label>
+            <button id="set-sources-root" type="button">Use this folder</button>
+            <span id="sources-root-status" class="hint" role="status" aria-live="polite"></span>
+          </div>
           <div class="flag-editor"><input id="flag-name" placeholder="New flag name"><input id="flag-rule" placeholder="Optional text rule"><button id="add-flag" type="button">Add flag</button><span id="flag-list"></span></div>
           <div id="catalog" class="catalog" aria-live="polite"></div>
         </aside>

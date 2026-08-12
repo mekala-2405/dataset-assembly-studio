@@ -130,20 +130,28 @@ reviewed, but they cannot contribute episodes.
 
 ## Run the application
 
-From an activated environment:
+Run the backend from inside the `dataset_studio` folder itself. The app keeps
+all of its state (settings, checkpoints, workspaces, jobs) under
+`.dataset_studio/` inside this folder, so your source dataset folders stay
+untouched. From an activated environment:
 
 ```bash
-cd /home/ubuntu/harsha/datasets
-PYTHONPATH=dataset_studio python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
+cd /home/mekala/project/transfers/dataset_studio
+python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
 ```
 
 Alternatively, start it with the existing `lingbot` interpreter without
 activating Conda:
 
 ```bash
-cd /home/ubuntu/harsha/datasets
-PYTHONPATH=dataset_studio /home/ubuntu/miniforge3/envs/lingbot/bin/python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
+cd /home/mekala/project/transfers/dataset_studio
+/home/ubuntu/miniforge3/envs/lingbot/bin/python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
 ```
+
+Then open the Sources tab and enter the absolute path of the folder that
+contains your LeRobot datasets (each dataset is a subfolder with its own
+`meta/info.json`) into the **Sources folder** box, and click **Use this
+folder**. The choice is remembered for the next start.
 
 Open <http://127.0.0.1:8000> on the same machine. Keep the terminal running and stop the server with `Ctrl+C`.
 

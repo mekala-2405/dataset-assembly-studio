@@ -4,12 +4,20 @@
 # Project source, documentation, and development records
 !/dataset_studio/
 !/docs/
-!/.superpowers/
+
+# Static site (Cloudflare Pages build output = /site)
+!/site/
+
+# Internal tooling and generated design records
+/.superpowers/
+/docs/superpowers/
 
 # Dataset Studio runtime state and generated exports
 /.dataset_studio/
 /exports/
 /dataset_index.json
+/dataset_studio/.dataset_studio/
+/dataset_studio/exports/
 
 # Generated archives
 *.tar

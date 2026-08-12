@@ -58,6 +58,8 @@ const state = {
   activeJobId: null,
   jobPollTimer: null,
   currentPhase: 'sources',
+  openSourceGroups: {},
+  phaseScrolls: {},
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -83,6 +85,8 @@ async function apiJSON(url, options = {}) {
 }
 
 function showPhase(phase) {
+  const previous = state.currentPhase;
+  state.phaseScrolls[previous] = window.scrollY;
   state.currentPhase = phase;
   document.querySelectorAll('.phase-tab').forEach((tab) => tab.classList.toggle('active', tab.dataset.phase === phase));
   document.querySelectorAll('.phase-panel').forEach((panel) => panel.classList.toggle('active', panel.id === phase));
@@ -96,6 +100,8 @@ function showPhase(phase) {
     if (!state.preflight || state.preflightStale) refreshPreflight();
     loadJobs();
   }
+  const saved = state.phaseScrolls[phase];
+  if (Number.isFinite(saved)) requestAnimationFrame(() => window.scrollTo(0, saved));
 }
 
 function updateBadges() {
@@ -1653,11 +1659,19 @@ function renderCatalog() {
   });
   $('#catalog-count').textContent = `${groups.size} source folders · ${visible.length} recorded datasets`;
   const container = $('#catalog');
+  const scrollTop = container.scrollTop;
+  container.querySelectorAll('.source-group').forEach((group) => {
+    state.openSourceGroups[group.dataset.source] = group.open;
+  });
   container.innerHTML = '';
   [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).forEach(([source, datasets]) => {
     const group = document.createElement('details');
     group.className = 'source-group';
-    group.open = datasets.length === 1;
+    group.dataset.source = source;
+    group.open = state.openSourceGroups[source] ?? datasets.length === 1;
+    group.ontoggle = () => {
+      state.openSourceGroups[source] = group.open;
+    };
     group.innerHTML = `<summary><span>${escapeHtml(source)}</span><small>${datasets.length} ${datasets.length === 1 ? 'dataset' : 'datasets'}</small></summary><div class="source-datasets"></div>`;
     const groupContent = group.querySelector('.source-datasets');
     datasets.forEach((dataset) => {
@@ -1710,6 +1724,54 @@ function renderCatalog() {
     });
     container.append(group);
   });
+  container.scrollTop = scrollTop;
+}
+
+function setSourcesRootStatus(message, kind = '') {
+  const status = $('#sources-root-status');
+  status.textContent = message;
+  status.className = `hint inline-status ${kind}`;
+}
+
+async function loadSourcesRoot() {
+  try {
+    const result = await apiJSON('/api/sources-root');
+    $('#sources-root').value = result.path;
+    setSourcesRootStatus(
+      result.exists && result.is_dir ? `Scanning ${result.path}` : `Folder unavailable: ${result.path}`,
+      result.exists && result.is_dir ? '' : 'failed',
+    );
+  } catch (error) {
+    setSourcesRootStatus(`Could not load sources folder: ${error.message}`, 'failed');
+  }
+}
+
+async function switchSourcesRoot() {
+  const path = $('#sources-root').value.trim();
+  if (!path) {
+    setSourcesRootStatus('Enter an absolute folder path to the datasets.', 'failed');
+    return;
+  }
+  $('#set-sources-root').disabled = true;
+  setSourcesRootStatus('Switching sources folder and rescanning…', 'saving');
+  try {
+    const result = await apiJSON('/api/sources-root', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    state.catalog = [];
+    state.episodeGroups = {};
+    state.episodeGroupErrors = {};
+    state.currentDataset = null;
+    state.focusedEpisode = null;
+    await loadCatalog();
+    setSourcesRootStatus(`Sources folder is ${result.path} (${state.catalog.length} datasets).`, 'saved');
+  } catch (error) {
+    setSourcesRootStatus(`Could not switch sources folder: ${error.message}`, 'failed');
+  } finally {
+    $('#set-sources-root').disabled = false;
+  }
 }
 
 async function loadCatalog() {
@@ -2253,6 +2315,10 @@ async function prepareArchive(id) {
 }
 
 $('#search').addEventListener('input', renderCatalog);
+$('#set-sources-root').onclick = switchSourcesRoot;
+$('#sources-root').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') switchSourcesRoot();
+});
 $('#refresh').onclick = loadCatalog;
 $('#validate').onclick = validateCurrentSelection;
 $('#stage-all-episodes').onclick = stageAllUsableEpisodes;
@@ -2367,6 +2433,10 @@ document.addEventListener('keydown', (event) => {
   toggleDatasetFlag(state.activeDataset, Number(event.key) - 1);
 });
 
-loadCatalog().catch((error) => {
+Promise.all([
+  loadCatalog(),
+  loadSourcesRoot(),
+]).catch((error) => {
   $('#catalog').innerHTML = `<p class="notice bad">Could not load catalog: ${escapeHtml(error.message)}</p>`;
+  setSourcesRootStatus(`Could not load sources folder: ${error.message}`, 'failed');
 });

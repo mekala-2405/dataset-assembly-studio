@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Dataset Assembly Studio — curated LeRobot v2.1 datasets</title>
+    <meta name="description" content="Dataset Assembly Studio: discover LeRobot datasets, curate episodes, balance selections, and export verified LeRobot v2.1 data. A static demo site deployed on Cloudflare Pages.">
+    <link rel="stylesheet" href="assets/site.css">
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header>
+      <p class="eyebrow">LOCAL LEROBOT WORKBENCH</p>
+      <h1>Dataset Assembly Studio</h1>
+      <p>Review, normalize, and curate LeRobot datasets without ever touching a source dataset.</p>
+      <a class="btn primary" href="demo.html">Open the demo app</a>
+      <a class="btn" href="https://github.com/mekala-2405/transfers">GitHub</a>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="hero-card">
+          <video autoplay muted loop playsinline preload="metadata" aria-label="Sample wrist camera footage">
+            <source src="assets/media/5ep/wrist_ep01.mp4" type="video/mp4">
+          </video>
+          <div>
+            <p class="eyebrow">SAMPLE FOOTAGE</p>
+            <h2>Two cameras, one canonical contract</h2>
+            <p>Every exported dataset carries a fixed <strong>wrist</strong> view plus a selectable second camera — rebuilt to 30 FPS, 640×480, H.264.</p>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div><span>15</span><p>Curated episodes</p></div>
+          <div><span>60.6k</span><p>Frames exported</p></div>
+          <div><span>v2.1</span><p>LeRobot schema</p></div>
+          <div><span>2</span><p>Featured datasets</p></div>
+        </div>
+      </section>
+
+      <section class="feature-grid" aria-label="Workflow phases">
+        <article><p class="step">01</p><h2>Sources</h2><p>Recursively discover and validate LeRobot datasets — Parquet, metadata, cameras, episode duration.</p></article>
+        <article><p class="step">02</p><h2>Cameras &amp; joints</h2><p>Map source views to canonical cameras and auto-fill the six-joint SO-101 action/state order.</p></article>
+        <article><p class="step">03</p><h2>Episodes</h2><p>Gallery with staging and all-camera preview, plus per-episode final prompts and flags.</p></article>
+        <article><p class="step">04</p><h2>Balance</h2><p>Deterministic per-prompt and per-group caps with optional Groq-suggested group names.</p></article>
+        <article><p class="step">05</p><h2>Preflight</h2><p>Blocking validation that refuses to silently drop a single checkpoint.</p></article>
+        <article><p class="step">06</p><h2>Export</h2><p>Background jobs write normalized v2.1 data with rebuilt indices and edited prompts, optionally as a tarball.</p></article>
+      </section>
+
+      <section class="datasets" aria-label="Featured datasets">
+        <div class="section-head">
+          <div><p class="eyebrow">IN THIS DEMO</p><h2>Two curated LeRobot v2.1 datasets</h2></div>
+          <a class="btn" href="demo.html">Browse episodes in the demo app</a>
+        </div>
+        <div class="dataset-grid">
+          <article class="dataset-card">
+            <div class="card-head">
+              <div><p class="eyebrow">SO-101 · SINGLE TASK</p><h3>5ep</h3></div>
+              <span class="tag">5 episodes</span>
+            </div>
+            <p class="task">“Take the red block and put it in the white box”</p>
+            <ul>
+              <li><span>Frames</span><strong>5,370</strong></li>
+              <li><span>Videos</span><strong>10</strong></li>
+              <li><span>Chunks</span><strong>1</strong></li>
+              <li><span>FPS</span><strong>30.0</strong></li>
+              <li><span>Split</span><strong>train 0:5</strong></li>
+            </ul>
+          </article>
+          <article class="dataset-card">
+            <div class="card-head">
+              <div><p class="eyebrow">SO-101 · SINGLE TASK</p><h3>assembled_lerobot_v21</h3></div>
+              <span class="tag">10 episodes</span>
+            </div>
+            <p class="task">“Hanoi tower.”</p>
+            <ul>
+              <li><span>Frames</span><strong>55,254</strong></li>
+              <li><span>Videos</span><strong>20</strong></li>
+              <li><span>Chunks</span><strong>1</strong></li>
+              <li><span>FPS</span><strong>30.0</strong></li>
+              <li><span>Split</span><strong>train 0:10</strong></li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="cta">
+        <p class="eyebrow">STATIC DEMO</p>
+        <h2>Explore the assembly workflow</h2>
+        <p>The demo app walks the full nine-phase pipeline: Sources → Output → Cameras → Joints → Episodes → Tasks → Balance → Preflight → Export.</p>
+        <a class="btn primary" href="demo.html">Launch demo app</a>
+      </section>
+    </main>
+
+    <footer>
+      <p>Dataset Assembly Studio · static demo hosted on Cloudflare Pages</p>
+      <p><a href="https://github.com/mekala-2405/transfers">mekala-2405/transfers</a></p>
+    </footer>
+  </body>
+</html>
