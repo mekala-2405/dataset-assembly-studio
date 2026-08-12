@@ -3,19 +3,36 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Dataset Assembly Studio — demo</title>
-    <meta name="description" content="Interactive static mock of Dataset Assembly Studio, showing two curated LeRobot v2.1 datasets.">
-    <link rel="stylesheet" href="assets/demo.css">
+    <link rel="stylesheet" href="assets/style.css">
+    <link rel="stylesheet" href="assets/source-groups.css">
+    <link rel="stylesheet" href="assets/phases.css">
+    <link rel="stylesheet" href="assets/episodes.css">
+    <link rel="stylesheet" href="assets/autosave.css">
+    <style>
+      .static-link{display:inline-block;border:1px solid var(--leaf);border-radius:999px;padding:8px 14px;text-decoration:none;color:var(--leaf);font-weight:600;margin-left:8px;background:transparent}
+      .phase-blurb{color:var(--muted);font-size:14px;line-height:1.5;margin:14px 0}
+      .phase-blurb p{margin:6px 0}
+      .catalog-empty{border:1px dashed var(--line);border-radius:10px;padding:16px;margin-top:14px;background:var(--panel)}
+      .catalog-empty p{color:var(--muted);font-size:14px;margin:6px 0}
+      .gallery-note,.included-note{border:1px dashed var(--line);border-radius:10px;padding:14px;color:var(--muted);font-size:14px;background:var(--panel)}
+      .preflight-static{border:1px solid var(--line);border-radius:10px;padding:16px;background:var(--panel)}
+      .preflight-static p{color:var(--ink);font-weight:600;margin:0 0 8px}
+      .preflight-static ul{margin:0;padding-left:18px;color:var(--muted);line-height:1.7}
+      .static-footer{max-width:1500px;margin:30px auto 0;padding:20px clamp(18px,4vw,60px) 40px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+      .phase-blurb code{background:#eef4ee;border-radius:4px;padding:1px 5px;font-size:12px}
+    </style>
+    <title>Dataset Assembly Studio</title>
   </head>
   <body>
     <a class="skip" href="#workspace">Skip to workspace</a>
     <header>
-      <div><p class="eyebrow">LOCAL LEROBOT WORKBENCH · STATIC DEMO</p><h1>Dataset Assembly Studio</h1></div>
+      <div><p class="eyebrow">LOCAL LEROBOT WORKBENCH</p><h1>Dataset Assembly Studio</h1></div>
       <div class="header-actions">
-        <a class="btn" href="index.html">Landing page</a>
-        <a class="btn" href="https://github.com/mekala-2405/transfers">GitHub</a>
+        <a class="static-link" href="index.html">Landing page</a>
+        <a class="static-link" href="https://github.com/mekala-2405/transfers">GitHub</a>
       </div>
     </header>
+    <div id="save-banner" class="save-banner" aria-live="polite">Static snapshot — this demo explains each phase; it is not connected to a backend.</div>
     <nav class="phase-nav" aria-label="Dataset assembly phases">
       <button class="phase-tab active" data-phase="sources">1 Sources</button>
       <button class="phase-tab" data-phase="output">2 Output</button>
@@ -29,13 +46,26 @@
     </nav>
     <main id="workspace">
       <section class="hero">
-        <div><p>Review, normalize, and curate without touching a source dataset.</p><div id="metrics" class="metrics"></div></div>
+        <div><p>Review, normalize, and curate without touching a source dataset. Click through the nine phases to see what each one does.</p></div>
       </section>
 
       <section id="sources" class="phase-panel active">
         <aside class="catalog-panel">
-          <div class="section-title"><h2>Source catalog</h2><span id="catalog-count"></span></div>
-          <div id="catalog" class="catalog"></div>
+          <div class="section-title"><h2>Source catalog</h2></div>
+          <div class="sources-root-control" aria-label="Sources folder">
+            <label for="sources-root">Sources folder
+              <input id="sources-root" type="text" placeholder="/absolute/path/to/dataset_folders" autocomplete="off">
+            </label>
+            <button type="button">Use this folder</button>
+            <span class="hint" role="status">Points the app at a root that is scanned recursively for LeRobot datasets.</span>
+          </div>
+          <div class="flag-editor">
+            <p class="phase-blurb">Every discovered dataset is validated before it can be used — Parquet readability, metadata, camera views, and episode duration are all checked up front.</p>
+          </div>
+          <div class="catalog-empty">
+            <p>In the live app, this panel lists every validated dataset found under the sources root.</p>
+            <p>Each card shows the robot type, schema version, task list, camera views, episode count, and any validation flags.</p>
+          </div>
         </aside>
       </section>
 
@@ -43,80 +73,145 @@
         <section class="work-panel">
           <div class="phase-heading"><div><p class="eyebrow">PROJECT SETTINGS</p><h2>Output contract</h2><p>One verified LeRobot v2.1 dataset assembled from every approved checkpoint.</p></div><span class="schema-stamp">30 FPS · 640×480 · H.264</span></div>
           <div class="settings-grid">
-            <label>Dataset folder name <input value="assembled_lerobot_v21" disabled></label>
-            <label>Output parent directory <input value="/home/mekala/project/transfers/dataset" disabled></label>
-            <div class="camera-contract"><div><small>CAMERA 01 · FIXED</small><strong>wrist</strong><span>Required in every approved dataset</span></div><label><small>CAMERA 02 · SELECTABLE</small><select disabled><option>front</option></select></label></div>
-            <label>Maximum episodes per edited task <input type="number" value="0" placeholder="No cap" disabled></label>
+            <label>Dataset folder name <input type="text" placeholder="e.g. assembled_lerobot_v21" disabled></label>
+            <label>Output parent directory <input type="text" placeholder="/absolute/path/to/output" disabled></label>
           </div>
+          <div class="camera-contract" aria-label="Output camera contract">
+            <div><small>CAMERA 01 · FIXED</small><strong>wrist</strong><span>Required in every approved dataset</span></div>
+            <label><small>CAMERA 02 · SELECTABLE</small><span class="hint">The canonical second view exported alongside wrist</span></label>
+          </div>
+          <p class="phase-blurb">Define the folder name, output directory, camera pair, and an optional per-task episode cap before any source is opened.</p>
         </section>
       </section>
 
       <section id="cameras" class="phase-panel">
         <section class="work-panel">
-          <div class="phase-heading"><div><p class="eyebrow">CURRENT DATASET</p><h2>Camera mapping</h2><p class="hint">Source views are mapped to canonical output cameras.</p></div><span class="schema-stamp">2 of 2 mapped</span></div>
-          <div id="camera-workspace" class="choices"></div>
+          <div class="phase-heading"><div><p class="eyebrow">CURRENT DATASET</p><h2>Camera mapping</h2><p class="hint">Map each source camera view to the canonical output camera.</p></div><span class="schema-stamp">Per-dataset mapping</span></div>
+          <div class="choices">
+            <div class="choice"><div><span class="key">CAMERA 01 · FIXED</span><strong>wrist ← source view</strong></div><span class="ok">✓ mapped</span></div>
+            <div class="choice"><div><span class="key">CAMERA 02 · SELECTABLE</span><strong>front ← source view</strong></div><span class="ok">✓ mapped</span></div>
+          </div>
+          <p class="phase-blurb">Source datasets rarely share the same camera names. Here you choose which recorded view feeds the fixed wrist output and which feeds the selectable second camera.</p>
         </section>
       </section>
 
       <section id="joints" class="phase-panel">
         <section class="work-panel">
-          <div class="phase-heading"><div><p class="eyebrow">CURRENT DATASET</p><h2>Joint mapping</h2><p class="hint">Canonical six-joint SO-101 order for action and observation state.</p></div><span class="schema-stamp">Auto-mapped</span></div>
-          <div id="joint-workspace" class="joint-table"></div>
+          <div class="phase-heading"><div><p class="eyebrow">CURRENT DATASET</p><h2>Joint mapping</h2><p class="hint">Action and observation state in one canonical six-joint order.</p></div><span class="schema-stamp">Auto-suggested</span></div>
+          <p class="joint-intro">Action and observation state are exported in the same canonical six-joint SO-101 order. Suggested mappings are filled automatically; change a selector only when the source order differs.</p>
+          <div class="choices">
+            <div class="choice"><div><span class="key">CANONICAL ORDER</span><strong>shoulder_pan · shoulder_lift · elbow_flex · wrist_flex · wrist_roll · gripper</strong></div><span class="ok">✓ auto-mapped</span></div>
+          </div>
+          <p class="phase-blurb">Apply the same canonical order to every dataset so the combined export stays consistent across sources.</p>
         </section>
       </section>
 
       <section id="episodes" class="phase-panel">
         <section class="work-panel wide-panel">
           <div class="section-title">
-            <h2>Episode gallery</h2>
+            <h2>Assembly tray</h2>
             <div class="episode-bulk-actions">
-              <span id="episode-count" class="tag"></span>
               <button class="quiet" type="button" disabled>Stage all usable</button>
+              <button class="quiet danger" type="button" disabled>Clear stage</button>
             </div>
           </div>
+          <div class="phase-blurb">
+            <p>Review every episode of the current dataset in a gallery with staging and all-camera preview.</p>
+            <p>Episodes are checked for consistency — frame counts, camera coverage, and task association — before they can be added to the temporary stage.</p>
+          </div>
+          <section class="episode-group-panel" aria-labelledby="episode-group-heading">
+            <div class="episode-group-toolbar">
+              <div>
+                <p class="eyebrow">DIVERSITY SAMPLER</p>
+                <h3 id="episode-group-heading">Subtask groups</h3>
+                <p>Build a temporary stage with exact per-variant counts or a total subgroup cap. Nothing enters the real recipe until you commit it in Tasks.</p>
+              </div>
+              <span class="schema-stamp">Deterministic spread</span>
+            </div>
+          </section>
           <div class="episode-review-layout">
             <section>
-              <div class="gallery-heading"><div><h3>Dataset episodes</h3><small>Select a dataset above to review its episodes</small></div><span id="episode-key" class="tag"></span></div>
-              <div id="episode-gallery" class="episode-gallery"></div>
+              <div class="gallery-heading">
+                <div><h3>Episode gallery</h3><small>In the live app each thumbnail previews its episode; staged episodes carry per-episode prompts.</small></div>
+              </div>
+              <div class="gallery-note">Open a dataset from Sources to review every episode.</div>
             </section>
-            <section id="episode-detail" class="episode-detail"><p class="empty">Choose an episode to preview both cameras.</p></section>
+            <section class="episode-detail"><p class="empty">Choose an episode to preview all available cameras and review its metadata.</p></section>
           </div>
+          <div class="output-reminder"><span>Output cameras</span><strong>wrist</strong><span>+</span><strong>front</strong><small>Change these in Output; map source views in Cameras.</small></div>
         </section>
       </section>
 
       <section id="tasks" class="phase-panel">
         <section class="work-panel">
-          <div class="phase-heading"><div><p class="eyebrow">SAVED RECIPE · CURRENT DATASET</p><h2>Included episodes</h2><p>Every episode staged from the gallery enters the final recipe unchanged.</p></div><span id="included-count" class="schema-stamp">0 included episodes</span></div>
-          <div id="tasks-view" class="task-bulk-list"></div>
+          <div class="phase-heading"><div><p class="eyebrow">TEMPORARY · CURRENT DATASET</p><h2>Staged episode tray</h2><p>Include or exclude episodes individually from each row, or use the bulk controls for the whole stage.</p></div><span class="schema-stamp">Per-episode inclusion</span></div>
+          <div class="task-bulk-controls">
+            <label for="bulk-task-prompt">Prompt for every staged episode
+              <input id="bulk-task-prompt" maxlength="500" placeholder="Prepare a shared final prompt" disabled>
+            </label>
+          </div>
+          <p class="phase-blurb">Prepare a shared prompt for the whole stage, or review each episode individually and apply a unique final prompt before committing it to the saved recipe.</p>
+          <section class="included-episodes-panel" aria-labelledby="included-episodes-heading">
+            <div class="phase-heading">
+              <div><p class="eyebrow">SAVED RECIPE · CURRENT DATASET</p><h3 id="included-episodes-heading">Included episodes</h3><p>This list is independent of the temporary stage and always shows what is currently included.</p></div>
+            </div>
+            <div class="included-note">Included episodes are listed here with their final prompts; edit or exclude them at any time.</div>
+          </section>
         </section>
       </section>
 
       <section id="balance" class="phase-panel">
         <section class="work-panel">
-          <div class="phase-heading"><div><p class="eyebrow">ALL APPROVED CHECKPOINTS</p><h2>Global balance</h2><p>Per-prompt and per-task-group caps keep the combined export evenly spread.</p></div><span class="schema-stamp">Deterministic caps</span></div>
-          <div id="balance-stats" class="metrics"></div>
-          <div id="balance-view" class="balance-table"></div>
+          <div class="phase-heading"><div><p class="eyebrow">ALL APPROVED CHECKPOINTS</p><h2>Global balance</h2><p>Draft and excluded checkpoints never enter these counts.</p></div><button class="quiet" type="button" disabled>Refresh approved data</button></div>
+          <div class="balance-legend"><span><i class="selected-key"></i> Selected</span><span><i class="retained-key"></i> Retained after cap</span></div>
+          <p class="phase-blurb">Deterministic per-prompt and per-task-group caps spread the approved checkpoints evenly across tasks, so one task cannot dominate the combined export.</p>
+          <section class="task-group-panel" aria-labelledby="task-group-heading">
+            <div class="task-group-toolbar">
+              <div><p class="eyebrow">LOCAL CLUSTERS · GROQ NAMES</p><h3 id="task-group-heading">Task groups</h3><p>Groups organize balancing only. Approved and exported prompts are never changed.</p></div>
+              <button type="button" disabled>Generate names with Groq</button>
+            </div>
+          </section>
         </section>
       </section>
 
       <section id="preflight" class="phase-panel">
         <section class="work-panel wide-panel">
-          <div class="phase-heading"><div><p class="eyebrow">BLOCKING VALIDATION</p><h2>Preflight</h2><p>Nothing is silently dropped. Resolve every blocker before export.</p></div><span class="schema-stamp" id="preflight-status"></span></div>
-          <div id="preflight-view" class="preflight-list"></div>
+          <div class="phase-heading"><div><p class="eyebrow">BLOCKING VALIDATION</p><h2>Preflight</h2><p>Nothing is silently dropped. Resolve every blocker before export.</p></div><button type="button" disabled>Run preflight</button></div>
+          <div class="preflight-static">
+            <p><strong>What it verifies:</strong></p>
+            <ul>
+              <li>Every approved checkpoint is present and readable.</li>
+              <li>The two-camera output contract holds across the whole selection.</li>
+              <li>Joint and camera mappings are consistent with the export schema.</li>
+              <li>Task-group caps are respected and no checkpoint is dropped silently.</li>
+            </ul>
+          </div>
+          <section class="manifest-section"><div class="section-title"><h3>Frozen manifest preview</h3></div><p class="hint">After preflight passes, the export manifest is shown here before anything is written.</p></section>
         </section>
       </section>
 
       <section id="export" class="phase-panel">
         <section class="work-panel wide-panel">
-          <div class="phase-heading"><div><p class="eyebrow">FINAL HANDOFF</p><h2>Export</h2><p>Reconfirm the two-camera contract, then run the verified export as a background job.</p></div><span class="schema-stamp" id="export-readiness"></span></div>
-          <div id="export-view" class="export-card"></div>
+          <div class="phase-heading"><div><p class="eyebrow">FINAL HANDOFF</p><h2>Export</h2><p>Reconfirm the two-camera contract, then run the verified export in the background.</p></div><span id="export-readiness" class="readiness">Preflight required</span></div>
+          <div class="export-confirmation">
+            <div class="camera-contract compact"><div><small>CAMERA 01</small><strong>wrist</strong><span>Fixed</span></div><label><small>CAMERA 02 · RECONFIRM</small><span class="hint">Must match the Output settings</span></label></div>
+            <label class="confirmation-check"><input type="checkbox" disabled> I confirm this export includes every approved checkpoint that passes the global task cap, with exactly these two cameras.</label>
+          </div>
+          <p class="phase-blurb">The export runs as a background job: normalized v2.1 data with rebuilt indices and edited prompts, optionally packaged as a <code>.tar.gz</code> archive. Job progress is shown in the jobs list below.</p>
+          <section class="jobs-section"><div class="section-title"><h3>Export jobs</h3></div><p class="hint">Completed exports appear here with their status and archive path.</p></section>
         </section>
       </section>
     </main>
-    <footer>
-      <p>Static mock — the live tool runs locally with FastAPI. Data is real metadata from the two featured datasets.</p>
+    <footer class="static-footer">
+      <p>Static snapshot of the Dataset Assembly Studio UI — no backend, no live data. See the README for the real workflow.</p>
     </footer>
-    <script src="assets/data.js"></script>
-    <script src="assets/demo.js"></script>
+    <script>
+      document.querySelectorAll(".phase-tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll(".phase-tab").forEach((t) => t.classList.toggle("active", t === tab));
+          document.querySelectorAll(".phase-panel").forEach((p) => p.classList.toggle("active", p.id === tab.dataset.phase));
+        });
+      });
+    </script>
   </body>
 </html>
