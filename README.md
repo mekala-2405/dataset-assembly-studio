@@ -17,8 +17,7 @@ recorded against the real `dataset/` folder (3 datasets, 20 usable episodes).
 
 <video controls src="docs/walkthrough/output.mp4" width="720"></video>
 
-*Stills for each scene live in `docs/walkthrough/shots/`; a timestamped
-transcript is in `docs/walkthrough/TRANSCRIPT.md`.*
+
 
 ## Contents
 
