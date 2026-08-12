@@ -15,9 +15,11 @@ Auto-generated screen tour of the full pipeline — source discovery,
 camera & joint mapping, episode curation, balancing, preflight, and export —
 recorded against the real `dataset/` folder (3 datasets, 20 usable episodes).
 
-<video controls src="docs/walkthrough/output.mp4" width="720"></video>
+[![Watch the walkthrough](docs/walkthrough/video-thumb.jpg)](docs/walkthrough/output.mp4)
 
 
+
+*Click the thumbnail to open the video in GitHub's viewer.*
 
 ## Contents
 
