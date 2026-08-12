@@ -24,6 +24,11 @@
       .media-chip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 12px;color:var(--ink);font-weight:600;cursor:pointer;font-size:12px}
       .media-chip.active{background:var(--leaf);color:#fff;border-color:var(--leaf)}
       .episode-tile-focus{appearance:none;background:transparent;border:0;color:inherit;cursor:pointer}
+      .static-footer{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+      .contributors{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .footer-label{font:700 11px ui-monospace,monospace;letter-spacing:.13em;color:var(--leaf)}
+      .contributors a{text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:5px 12px;color:var(--ink);background:var(--panel)}
+      .contributors a:hover{border-color:var(--leaf);color:var(--leaf)}
     </style>
     <title>Dataset Assembly Studio</title>
   </head>
@@ -209,6 +214,12 @@
     </main>
     <footer class="static-footer">
       <p>Static snapshot of the Dataset Assembly Studio UI — no backend, no live data. See the README for the real workflow.</p>
+      <div class="contributors" aria-label="Contributors">
+        <span class="footer-label">Contributors</span>
+        <a href="https://github.com/mekala-2405">@mekala-2405</a>
+        <a href="https://github.com/ayushwasnothere">@ayushwasnothere</a>
+        <a href="https://mharsh.me">Portfolio</a>
+      </div>
     </footer>
     <script src="assets/media.js"></script>
     <script>

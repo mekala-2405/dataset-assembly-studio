@@ -196,3 +196,10 @@ for a visual walkthrough.
 
 Optional Groq integration for task-group naming. Copy `.env.example` to `.env`
 and set `GROQ_API_KEY`. All curation and export features work without it.
+
+## Contributors
+
+- [@mekala-2405](https://github.com/mekala-2405)
+- [@ayushwasnothere](https://github.com/ayushwasnothere)
+
+Portfolio: [mharsh.me](https://mharsh.me)
