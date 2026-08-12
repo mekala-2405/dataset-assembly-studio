@@ -20,6 +20,10 @@
       .preflight-static ul{margin:0;padding-left:18px;color:var(--muted);line-height:1.7}
       .static-footer{max-width:1500px;margin:30px auto 0;padding:20px clamp(18px,4vw,60px) 40px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
       .phase-blurb code{background:#eef4ee;border-radius:4px;padding:1px 5px;font-size:12px}
+      .media-switch{display:flex;flex-wrap:wrap;gap:6px}
+      .media-chip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 12px;color:var(--ink);font-weight:600;cursor:pointer;font-size:12px}
+      .media-chip.active{background:var(--leaf);color:#fff;border-color:var(--leaf)}
+      .episode-tile-focus{appearance:none;background:transparent;border:0;color:inherit;cursor:pointer}
     </style>
     <title>Dataset Assembly Studio</title>
   </head>
@@ -132,11 +136,12 @@
           <div class="episode-review-layout">
             <section>
               <div class="gallery-heading">
-                <div><h3>Episode gallery</h3><small>In the live app each thumbnail previews its episode; staged episodes carry per-episode prompts.</small></div>
+                <div><h3>Episode gallery</h3><small>Real footage from the featured datasets — click an episode to preview its cameras.</small></div>
+                <div class="media-switch" id="media-switch" aria-label="Choose a dataset"></div>
               </div>
-              <div class="gallery-note">Open a dataset from Sources to review every episode.</div>
+              <div id="episode-gallery" class="episode-gallery"></div>
             </section>
-            <section class="episode-detail"><p class="empty">Choose an episode to preview all available cameras and review its metadata.</p></section>
+            <section id="episode-detail" class="episode-detail"><p class="empty">Choose an episode to preview its front and wrist cameras.</p></section>
           </div>
           <div class="output-reminder"><span>Output cameras</span><strong>wrist</strong><span>+</span><strong>front</strong><small>Change these in Output; map source views in Cameras.</small></div>
         </section>
@@ -205,13 +210,114 @@
     <footer class="static-footer">
       <p>Static snapshot of the Dataset Assembly Studio UI — no backend, no live data. See the README for the real workflow.</p>
     </footer>
+    <script src="assets/media.js"></script>
     <script>
+      const MEDIA = window.DEMO_MEDIA;
+
       document.querySelectorAll(".phase-tab").forEach((tab) => {
         tab.addEventListener("click", () => {
           document.querySelectorAll(".phase-tab").forEach((t) => t.classList.toggle("active", t === tab));
           document.querySelectorAll(".phase-panel").forEach((p) => p.classList.toggle("active", p.id === tab.dataset.phase));
         });
       });
+
+      const mediaKeys = Object.keys(MEDIA);
+      let currentMedia = mediaKeys[0];
+      const switchBox = document.getElementById("media-switch");
+      const gallery = document.getElementById("episode-gallery");
+      const detail = document.getElementById("episode-detail");
+
+      function makeVideo(src, controls) {
+        const v = document.createElement("video");
+        v.muted = true;
+        v.loop = true;
+        v.preload = "metadata";
+        v.playsInline = true;
+        if (controls) v.controls = true;
+        const s = document.createElement("source");
+        s.src = src;
+        s.type = "video/mp4";
+        v.appendChild(s);
+        return v;
+      }
+
+      function renderMediaSwitch() {
+        switchBox.innerHTML = "";
+        mediaKeys.forEach((key) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = key;
+          b.className = "media-chip" + (key === currentMedia ? " active" : "");
+          b.addEventListener("click", () => { currentMedia = key; renderGallery(); });
+          switchBox.appendChild(b);
+        });
+      }
+
+      function renderGallery() {
+        const d = MEDIA[currentMedia];
+        gallery.innerHTML = "";
+        detail.innerHTML = '<p class="empty">Choose an episode to preview its front and wrist cameras.</p>';
+        let first = null;
+        Object.entries(d.episodes).forEach(([idx, clip]) => {
+          if (!first) first = clip;
+          const tile = document.createElement("article");
+          tile.className = "episode-tile";
+          tile.innerHTML =
+            '<button type="button" class="episode-tile-focus">' +
+            '<img src="' + clip.poster + '" alt="Episode ' + idx + ' preview" loading="lazy">' +
+            '<span class="episode-tile-title">Episode ' + idx + "</span>" +
+            "<small>" + d.label + "</small>" +
+            "</button>";
+          tile.querySelector(".episode-tile-focus").addEventListener("click", () => {
+            gallery.querySelectorAll(".episode-tile").forEach((t) => t.classList.remove("focused", "selected"));
+            tile.classList.add("focused");
+            renderDetail(idx, clip);
+          });
+          gallery.appendChild(tile);
+        });
+        if (first) {
+          const key = Object.keys(d.episodes)[0];
+          gallery.firstElementChild.classList.add("selected");
+          renderDetail(key, first);
+        }
+      }
+
+      function renderDetail(idx, clip) {
+        detail.innerHTML = "";
+        const h = document.createElement("h3");
+        h.textContent = "Episode " + idx;
+        detail.appendChild(h);
+        const sub = document.createElement("p");
+        sub.className = "hint";
+        sub.textContent = MEDIA[currentMedia].label;
+        detail.appendChild(sub);
+        const grid = document.createElement("div");
+        grid.className = "episode-previews";
+        const cams = [["front", clip.front], ["wrist", clip.wrist]].filter(([, s]) => s);
+        cams.forEach(([cam, src]) => {
+          const fig = document.createElement("figure");
+          fig.appendChild(makeVideo(src, true));
+          const cap = document.createElement("figcaption");
+          cap.textContent = cam;
+          fig.appendChild(cap);
+          grid.appendChild(fig);
+        });
+        if (!clip.wrist) {
+          const fig = document.createElement("figure");
+          const slot = document.createElement("div");
+          slot.className = "camera-video-slot";
+          slot.textContent = "wrist — no clip in this snapshot";
+          fig.appendChild(slot);
+          const cap = document.createElement("figcaption");
+          cap.textContent = "wrist";
+          fig.appendChild(cap);
+          grid.appendChild(fig);
+        }
+        detail.appendChild(grid);
+      }
+
+      renderMediaSwitch();
+      renderGallery();
     </script>
   </body>
 </html>
