@@ -204,3 +204,5 @@ and set `GROQ_API_KEY`. All curation and export features work without it.
 - [@ayushwasnothere](https://github.com/ayushwasnothere)
 
 Portfolio: [mharsh.me](https://mharsh.me)
+
+Portfolio(ayushwasnothere): [cytrus.me](https://cytrus.me)
