@@ -15,11 +15,9 @@ Auto-generated screen tour of the full pipeline — source discovery,
 camera & joint mapping, episode curation, balancing, preflight, and export —
 recorded against the real `dataset/` folder (3 datasets, 20 usable episodes).
 
-[![Watch the walkthrough](docs/walkthrough/video-thumb.jpg)](docs/walkthrough/output.mp4)
+![Dataset Assembly Studio walkthrough](docs/walkthrough/demo.gif)
 
-
-
-*Click the thumbnail to open the video in GitHub's viewer.*
+Full walkthrough video: [docs/walkthrough/output.mp4](docs/walkthrough/output.mp4)
 
 ## Contents
 

@@ -8,12 +8,6 @@ v2.1 dataset.
 Source datasets are never modified. Drafts, approvals, claims, settings, export
 manifests, downloads, and job state are stored beneath `.dataset_studio/`.
 
-## Walkthrough
-
-![Dataset Assembly Studio walkthrough](docs/walkthrough/demo.gif)
-
-Full walkthrough video: [docs/walkthrough/output.mp4](docs/walkthrough/output.mp4)
-
 ## Features
 
 - Recursively discovers LeRobot datasets beneath the folder where the server is
