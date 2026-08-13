@@ -17,7 +17,7 @@ recorded against the real `dataset/` folder (3 datasets, 20 usable episodes).
 
 ![Dataset Assembly Studio walkthrough](docs/walkthrough/demo.gif)
 
-Full walkthrough video: [docs/walkthrough/output.mp4](docs/walkthrough/output.mp4)
+Full walkthrough video: [Watch on YouTube](https://youtu.be/bJFGVuzufwQ)
 
 ## Contents
 
